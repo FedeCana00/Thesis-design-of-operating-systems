@@ -4,6 +4,7 @@
 #include "my-thread.h"
 
 #define NUM_REINDEER 9
+#define HELP_ELVES 3 // number of elves required to be able to ask Santa for help
 #define SANTA_CLAUS "Santa Claus"
 #define REINDEER "Reindeer"
 #define ELF "Elf"
@@ -51,12 +52,12 @@ void *exeSantaClaus(void *id) {
     while(true){
         sem_wait(&santaSem);
         sem_wait(&mutex);
-        if(reindeer >= 9){
+        if(reindeer >= NUM_REINDEER){
             prepareSleigh();
-            for(int z = 0; z < 9; z++)
+            for(int z = 0; z < NUM_REINDEER; z++)
                 sem_post(&reindeerSem);
-            reindeer -= 9;
-        } else if(elves == 3)
+            reindeer -= NUM_REINDEER;
+        } else if(elves == HELP_ELVES)
             helpElves();
 
         sem_post(&mutex);
@@ -80,7 +81,7 @@ void *exeReindeer(void *id) {
 
     sem_wait(&mutex);
     reindeer++;
-    if(reindeer == 9){
+    if(reindeer == NUM_REINDEER){
         printf("The reindeer %d is the last to arrive and takes Santa Claus with him\n", *pi);
         sem_post(&santaSem);
     } else
@@ -108,7 +109,7 @@ void *exeElf(void *id){
     sem_wait(&elfTex);
     sem_wait(&mutex);
     elves++;
-    if(elves == 3)
+    if(elves == HELP_ELVES)
         sem_post(&santaSem);
     else
         sem_post(&elfTex);
@@ -144,8 +145,8 @@ int main (int argc, char **argv) {
     NUM_ELVES = atoi(argv[1]);
 
     // Check number of reindeer passed
-    if (NUM_ELVES < 3){
-        sprintf(error, "Number of elves expected >= 3, number of elves passed =  %d\n", NUM_ELVES);
+    if (NUM_ELVES < HELP_ELVES){
+        sprintf(error, "Number of elves expected >= %d, number of elves passed =  %d\n",HELP_ELVES, NUM_ELVES);
         perror(error);
         exit(3);
     }
