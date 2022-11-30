@@ -30,12 +30,12 @@ void getHelp(int i){
 
 void prepareSleigh(){
     printf("Santa Claus is preparing the sleigh\n");
-    sleep(5);
+    sleep(10);
 }
 
 void helpElves(){
     printf("Santa Claus is helping three elves\n");
-    sleep(2);
+    sleep(5);
 }
 
 void *exeSantaClaus(void *id) {
@@ -118,11 +118,8 @@ void *exeElf(void *id){
 
     sem_wait(&mutex);
     elves--;
-    if(elves == 0){
-        printf("The elf %d is the last one on the list who has his problems solved thanks to Santa Claus\n", *pi);
+    if(elves == 0)
         sem_post(&elfTex);
-    } else
-        printf("The elf %d solved his problems thanks to Santa Claus\n", *pi);
     sem_post(&mutex);
 
     // terminates the current thread and returns the integer value of the index
@@ -132,7 +129,7 @@ void *exeElf(void *id){
 
 int main (int argc, char **argv) {
     ThreadInfo *threads;
-    int i;
+    int i, pos;
     int *p;
     int NUM_ELVES;
     char error[250];
@@ -141,7 +138,7 @@ int main (int argc, char **argv) {
     if (argc != 2) {
         sprintf(error, "Number of parameters expected = 1, number of parameters passed = %d\n", argc - 1);
         perror(error);
-        exit(1);
+        exit(2);
     }
 
     NUM_ELVES = atoi(argv[1]);
@@ -150,13 +147,13 @@ int main (int argc, char **argv) {
     if (NUM_ELVES < 3){
         sprintf(error, "Number of elves expected >= 3, number of elves passed =  %d\n", NUM_ELVES);
         perror(error);
-        exit(2);
+        exit(3);
     }
 
     threads = (ThreadInfo *) malloc((NUM_ELVES + NUM_REINDEER + 1) * sizeof(ThreadInfo));
     if(threads == NULL){
         perror("Problems with array threads allocation!\n");
-        exit(3);
+        exit(4);
     }
 
     // Initialize Santa Claus Sempahore to 0
@@ -171,16 +168,16 @@ int main (int argc, char **argv) {
         exit(6);
     }
 
-    // Initialize elf mutex Sempahore to 0
+    // Initialize elf mutex Sempahore to 1
     if (sem_init(&elfTex, 0, 1) != 0) {
-        perror("Problems with initialization of REINDEER sempahore\n");
-        exit(6);
+        perror("Problems with initialization of ELF MUTEX sempahore\n");
+        exit(7);
     }
 
-    // Initialize mutex Sempahore to 0
+    // Initialize mutex Sempahore to 1
     if (sem_init(&mutex, 0, 1) != 0) {
-        perror("Problems with initialization of REINDEER sempahore\n");
-        exit(6);
+        perror("Problems with initialization of MUTEX sempahore\n");
+        exit(8);
     }
 
     // Create Santa Claus thread
@@ -191,7 +188,7 @@ int main (int argc, char **argv) {
 
     // Create Elves threads
     for (i = 0; i < NUM_ELVES; i++) {
-        int pos = i + 1;
+        pos = i + 1; // assignment location to insert thread information
         threads[pos].id = i;
         strcpy(threads[pos].tag, ELF);
         threads[pos].start_routine = exeElf;
@@ -200,7 +197,7 @@ int main (int argc, char **argv) {
 
     // Create Reindeer threads
     for (i = 0; i < NUM_REINDEER; i++) {
-        int pos = NUM_ELVES + 1 + i;
+        pos = NUM_ELVES + 1 + i; // assignment location to insert thread information
         threads[pos].id = i;
         strcpy(threads[pos].tag, REINDEER);
         threads[pos].start_routine = exeReindeer;
@@ -210,7 +207,7 @@ int main (int argc, char **argv) {
     // Wait threads termination
     for (i = 0; i < NUM_ELVES + NUM_REINDEER + 1; i++){
         if(strcmp(threads[i].tag, SANTA_CLAUS) == 0)
-            printf("Santa Claus thread no need to be wait\n");
+            printf("Since Santa Claus is an infinite loop we can NOT wait for him\n");
         else {
             int res;
             pthread_join(threads[i].thread, (void**) & p);
