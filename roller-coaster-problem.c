@@ -1,23 +1,23 @@
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <semaphore.h>
+#include <string.h>
+#include "my-thread.h"
 
 #define CAR_CAPACITY 3
+#define CAR "Car"
+#define PASSENGER "Passenger"
 
 typedef enum {false, true} Boolean;
 
 /* global variables */
-int activePassengers; // number of total passengers threads active
 int boarders = 0; // counter of passengers on board
 int unboarders = 0; // counter of passengers unboard
 sem_t boardQueue; // passengers wait on this sempahore before boarding
 sem_t unboardQueue; // passengers wait on this semaphore before unboarding
 sem_t allAboard; // indicates that the car is full
 sem_t allAshore; // indicates that the car is empty
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // this mutex protect boarders, which count the number of passengers that have invoked boardCar
-pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // this mutex protects boarders, which count the number of passengers that have invoked boardCar
+pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER; // this mutex protects unboarders, which count the number of passengers that have invoked unboardCar
 
 void board(int i){
     printf("The passenger %d is getting into the car\n", i);
@@ -31,7 +31,7 @@ void unboard(int i){
 
 void run(){
     printf("The car is doing a lap around the track\n");
-    sleep(4);
+    sleep(5);
 }
 
 void load(){
@@ -55,7 +55,7 @@ void *exeCar(void *id) {
         exit(-1);
     }
 
-    while(activePassengers > 0){
+    while(true){
         load();
         for(j = 0; j < CAR_CAPACITY; j++)
             sem_post(&boardQueue);
@@ -107,16 +107,13 @@ void *exePassenger(void *id) {
     }
     pthread_mutex_unlock(&mutex2);
 
-    activePassengers--;
-
     // terminates the current thread and returns the integer value of the index
     *ptr = *pi;
     pthread_exit((void *) ptr);
 }
 
 int main (int argc, char **argv) {
-    pthread_t *thread;
-    int *taskids;
+    ThreadInfo *threads;
     int i;
     int *p;
     int NUM_PASSENGERS;
@@ -126,7 +123,7 @@ int main (int argc, char **argv) {
     if (argc != 2) {
         sprintf(error, "Number of parameters expected = 1, number of parameters passed = %d\n", argc - 1);
         perror(error);
-        exit(1);
+        exit(2);
     }
 
     NUM_PASSENGERS = atoi(argv[1]);
@@ -135,20 +132,12 @@ int main (int argc, char **argv) {
     if (NUM_PASSENGERS < CAR_CAPACITY){
         sprintf(error, "Number of passengers expected > %d, number of passengers passed = %d\n", CAR_CAPACITY, NUM_PASSENGERS);
         perror(error);
-        exit(2);
-    }
-
-    activePassengers = NUM_PASSENGERS;
-
-    thread = (pthread_t *) malloc((NUM_PASSENGERS + 1) * sizeof(pthread_t));
-    if (thread == NULL) {
-        perror("Problems with array thread allocation!\n");
         exit(3);
     }
 
-    taskids = (int *) malloc((NUM_PASSENGERS + 1) * sizeof(int));
-    if (taskids == NULL) {
-        perror("Problems with array taskids allocation!\n");
+    threads = (ThreadInfo *) malloc((NUM_PASSENGERS + 1) * sizeof(ThreadInfo));
+    if(threads == NULL){
+        perror("Problems with array threads allocation!\n");
         exit(4);
     }
 
@@ -176,35 +165,31 @@ int main (int argc, char **argv) {
         exit(8);
     }
 
-    // Create car thread
-    taskids[0] = 0;
-    printf("I'm about to create the CAR thread\n");
-    if (pthread_create(&thread[0], NULL, exeCar, (void *) (&taskids[0])) != 0) {
-            sprintf(error,"I'm MAIN THREAD and something went wrong with creation of CAR THREAD\n");
-            perror(error);
-            exit(9);
-    }
-    printf("I'm MAIN THREAD and I've created CAR THREAD\n");
+    // Create Car thread
+    threads[0].id = 0;
+    strcpy(threads[0].tag, CAR);
+    threads[0].start_routine = exeCar;
+    createThread(&threads[0], error);
 
-    // Create passengers threads
+    // Create Passengers threads
     for (i = 0; i < NUM_PASSENGERS; i++) {
-        int pos = i + 1;
-        taskids[pos] = i;
-        printf("I'm about to create the PASSENGER %d-esimo\n", taskids[pos]);
-        if (pthread_create(&thread[pos], NULL, exePassenger, (void *) (&taskids[pos])) != 0){
-                sprintf(error,"I'm MAIN THREAD and something went wrong with creation of PASSENGER THREAD %d-esimo\n", taskids[pos]);
-                perror(error);
-                exit(10);
-        }
-        printf("I'm MAIN THREAD and I've created PASSENGER THREAD with id = %lu\n", thread[pos]);
+        int pos = i + 1; // assignment location to insert thread information
+        threads[pos].id = i;
+        strcpy(threads[pos].tag, PASSENGER);
+        threads[pos].start_routine = exePassenger;
+        createThread(&threads[pos], error);
     }
 
     // Wait threads termination
     for (i = 0; i < NUM_PASSENGERS + 1; i++){
-        int ris;
-        pthread_join(thread[i], (void**) & p);
-        ris= *p;
-        printf("Pthread %d-esimo returns %d\n", i, ris);
+        if(strcmp(threads[i].tag, CAR) == 0)
+            printf("Since the car is an infinite loop we can NOT wait for it\n");
+        else {
+            int res;
+            pthread_join(threads[i].thread, (void**) & p);
+            res= *p;
+            printf("Pthread %d-esimo returns %d\n", i, res);
+        }
     }
 
     exit(0);
