@@ -1,12 +1,13 @@
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <semaphore.h>
+#include <string.h>
+#include "my-thread.h"
 
 #define BAR_CAPACITY 5
-#define MAX_TIME 5
-#define MIN_TIME 2
+#define CUSTOMER "Customer"
+
+#define MAX_TIME 5 // maximum time of thread sleep
+#define MIN_TIME 2 // minimum time of thread sleep
 
 typedef enum {false, true} Boolean;
 
@@ -16,6 +17,13 @@ int waiting = 0; // count the number of customers waiting
 sem_t block; // blocks customer if the bar is full
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // protects the counters eating and waiting
 Boolean mustWait = false; // indicates that the bar is (or has been) full
+
+void customerRelease(){
+    if(waiting && !mustWait)
+        sem_post(&block); // pass the mutex
+    else
+        pthread_mutex_unlock(&mutex);
+}
 
 void *exeCustomer(void *id) {
     int *pi = (int *)id;
@@ -31,16 +39,13 @@ void *exeCustomer(void *id) {
     if(mustWait){
         waiting++;
         pthread_mutex_unlock(&mutex);
-        sem_wait(&block);
+        sem_wait(&block); // when we resume, we have the mutex
         waiting--;
     }
 
     eating++;
-    mustWait = (eating == 5);
-    if(waiting && !mustWait)
-        sem_post(&block);
-    else
-        pthread_mutex_unlock(&mutex);
+    mustWait = (eating == BAR_CAPACITY);
+    customerRelease();
 
     printf("The customer %d is eating\n", *pi);
     sleep(rand() % (MAX_TIME + 1 - MIN_TIME) + MIN_TIME);
@@ -53,10 +58,7 @@ void *exeCustomer(void *id) {
         mustWait = false;
     }
 
-    if(waiting && !mustWait)
-        sem_post(&block);
-    else
-        pthread_mutex_unlock(&mutex);
+    customerRelease();
 
     // terminates the current thread and returns the integer value of the index
     *ptr = *pi;
@@ -64,8 +66,7 @@ void *exeCustomer(void *id) {
 }
 
 int main (int argc, char **argv) {
-    pthread_t *thread;
-    int *taskids;
+    ThreadInfo *threads;
     int i;
     int *p;
     int NUM_CUSTOMERS;
@@ -75,7 +76,7 @@ int main (int argc, char **argv) {
     if (argc != 2) {
         sprintf(error, "Number of parameters expected = 1, number of parameters passed = %d\n", argc - 1);
         perror(error);
-        exit(1);
+        exit(2);
     }
 
     NUM_CUSTOMERS = atoi(argv[1]);
@@ -84,18 +85,12 @@ int main (int argc, char **argv) {
     if (NUM_CUSTOMERS <= 0){
         sprintf(error, "Number of customers expected > 0, number of customers passed = %d\n", NUM_CUSTOMERS);
         perror(error);
-        exit(2);
-    }
-
-    thread = (pthread_t *) malloc((NUM_CUSTOMERS) * sizeof(pthread_t));
-    if (thread == NULL) {
-        perror("Problems with array thread allocation!\n");
         exit(3);
     }
 
-    taskids = (int *) malloc((NUM_CUSTOMERS) * sizeof(int));
-    if (taskids == NULL) {
-        perror("Problems with array taskids allocation!\n");
+    threads = (ThreadInfo *) malloc((NUM_CUSTOMERS) * sizeof(ThreadInfo));
+    if(threads == NULL){
+        perror("Problems with array threads allocation!\n");
         exit(4);
     }
 
@@ -107,19 +102,16 @@ int main (int argc, char **argv) {
 
     // Create customers threads
     for (i = 0; i < NUM_CUSTOMERS; i++) {
-        taskids[i] = i;
-        printf("I'm about to create the CUSTOMERS %d-esimo\n", taskids[i]);
-        if (pthread_create(&thread[i], NULL, exeCustomer, (void *) (&taskids[i])) != 0){
-                sprintf(error,"I'm MAIN THREAD and something went wrong with creation of CUSTOMERS THREAD %d-esimo\n", taskids[i]);
-                perror(error);
-                exit(10);
-        }
-        printf("I'm MAIN THREAD and I've created CUSTOMER THREAD with id = %lu\n", thread[i]);
+        threads[i].id = i;
+        strcpy(threads[i].tag, CUSTOMER);
+        threads[i].start_routine = exeCustomer;
+        createThread(&threads[i], error);
     }
+
     // Wait threads termination
     for (i = 0; i < NUM_CUSTOMERS; i++){
         int ris;
-        pthread_join(thread[i], (void**) & p);
+        pthread_join(threads[i].thread, (void**) & p);
         ris= *p;
         printf("Pthread %d-esimo returns %d\n", i, ris);
     }

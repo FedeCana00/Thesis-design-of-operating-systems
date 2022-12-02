@@ -1,12 +1,13 @@
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <semaphore.h>
+#include <string.h>
+#include "my-thread.h"
 
 #define BAR_CAPACITY 5
-#define MAX_TIME 5
-#define MIN_TIME 2
+#define CUSTOMER "Customer"
+
+#define MAX_TIME 5 // maximum time of thread sleep
+#define MIN_TIME 2 // minimum time of thread sleep
 
 typedef enum {false, true} Boolean;
 
@@ -34,7 +35,7 @@ void *exeCustomer(void *id) {
         sem_wait(&block);
     } else {
         eating++;
-        mustWait = (eating == 5);
+        mustWait = (eating == BAR_CAPACITY);
         pthread_mutex_unlock(&mutex);
     }
 
@@ -49,7 +50,7 @@ void *exeCustomer(void *id) {
         int n = waiting < BAR_CAPACITY ? waiting : BAR_CAPACITY;
         waiting -= n;
         eating += n;
-        mustWait = (eating == 5);
+        mustWait = (eating == BAR_CAPACITY);
         for(int j = 0; j < n; j++)
             sem_post(&block);
     }
@@ -61,8 +62,7 @@ void *exeCustomer(void *id) {
 }
 
 int main (int argc, char **argv) {
-    pthread_t *thread;
-    int *taskids;
+    ThreadInfo *threads;
     int i;
     int *p;
     int NUM_CUSTOMERS;
@@ -72,7 +72,7 @@ int main (int argc, char **argv) {
     if (argc != 2) {
         sprintf(error, "Number of parameters expected = 1, number of parameters passed = %d\n", argc - 1);
         perror(error);
-        exit(1);
+        exit(2);
     }
 
     NUM_CUSTOMERS = atoi(argv[1]);
@@ -81,18 +81,12 @@ int main (int argc, char **argv) {
     if (NUM_CUSTOMERS <= 0){
         sprintf(error, "Number of customers expected > 0, number of customers passed = %d\n", NUM_CUSTOMERS);
         perror(error);
-        exit(2);
-    }
-
-    thread = (pthread_t *) malloc((NUM_CUSTOMERS) * sizeof(pthread_t));
-    if (thread == NULL) {
-        perror("Problems with array thread allocation!\n");
         exit(3);
     }
 
-    taskids = (int *) malloc((NUM_CUSTOMERS) * sizeof(int));
-    if (taskids == NULL) {
-        perror("Problems with array taskids allocation!\n");
+    threads = (ThreadInfo *) malloc((NUM_CUSTOMERS) * sizeof(ThreadInfo));
+    if(threads == NULL){
+        perror("Problems with array threads allocation!\n");
         exit(4);
     }
 
@@ -104,19 +98,16 @@ int main (int argc, char **argv) {
 
     // Create customers threads
     for (i = 0; i < NUM_CUSTOMERS; i++) {
-        taskids[i] = i;
-        printf("I'm about to create the CUSTOMERS %d-esimo\n", taskids[i]);
-        if (pthread_create(&thread[i], NULL, exeCustomer, (void *) (&taskids[i])) != 0){
-                sprintf(error,"I'm MAIN THREAD and something went wrong with creation of CUSTOMERS THREAD %d-esimo\n", taskids[i]);
-                perror(error);
-                exit(10);
-        }
-        printf("I'm MAIN THREAD and I've created CUSTOMER THREAD with id = %lu\n", thread[i]);
+        threads[i].id = i;
+        strcpy(threads[i].tag, CUSTOMER);
+        threads[i].start_routine = exeCustomer;
+        createThread(&threads[i], error);
     }
+
     // Wait threads termination
     for (i = 0; i < NUM_CUSTOMERS; i++){
         int ris;
-        pthread_join(thread[i], (void**) & p);
+        pthread_join(threads[i].thread, (void**) & p);
         ris= *p;
         printf("Pthread %d-esimo returns %d\n", i, ris);
     }
